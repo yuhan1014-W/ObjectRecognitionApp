@@ -64,16 +64,16 @@ st.markdown(
         min-width: 130px;
     }
     .st-key-scan_another_button button {
-        color: #78958d;
+        color: #c9f5e9;
     }
     [data-testid="stToolbar"] button[aria-label*="Share"],
     [data-testid="stToolbar"] button[title*="Share"] {
-        color: #78958d;
+        color: #c9f5e9;
     }
     [data-testid="stToolbar"] button[aria-label*="Share"] svg,
     [data-testid="stToolbar"] button[title*="Share"] svg {
-        fill: #78958d;
-        stroke: #78958d;
+        fill: #c9f5e9;
+        stroke: #c9f5e9;
     }
     </style>
     <div class="hero">

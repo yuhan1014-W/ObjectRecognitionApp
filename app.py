@@ -63,6 +63,18 @@ st.markdown(
     [data-testid="stAudio"] {
         min-width: 130px;
     }
+    .st-key-scan_another_button button {
+        color: #78958d;
+    }
+    [data-testid="stToolbar"] button[aria-label*="Share"],
+    [data-testid="stToolbar"] button[title*="Share"] {
+        color: #78958d;
+    }
+    [data-testid="stToolbar"] button[aria-label*="Share"] svg,
+    [data-testid="stToolbar"] button[title*="Share"] svg {
+        fill: #78958d;
+        stroke: #78958d;
+    }
     </style>
     <div class="hero">
       <div class="eyebrow">A little more curious</div>
@@ -219,7 +231,11 @@ if "last_result" in st.session_state:
             st.markdown(f"**{result_language}**")
             st.write(result.get("translated_background", "N/A"))
 
-    if st.button("↻ Scan another object", use_container_width=True):
+    if st.button(
+        "↻ Scan another object",
+        use_container_width=True,
+        key="scan_another_button",
+    ):
         del st.session_state["last_result"]
         st.session_state.pop("last_language", None)
         st.rerun()

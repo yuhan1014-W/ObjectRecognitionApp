@@ -17,6 +17,16 @@ st.markdown(
         background:
             radial-gradient(ellipse at 8% 0%, rgba(133, 220, 199, .20), transparent 34rem),
             #f6f8f6;
+        color: #18332e;
+    }
+    .stApp h1,
+    .stApp h2,
+    .stApp h3,
+    .stApp h4,
+    .stApp p,
+    .stApp label,
+    .stApp [data-testid="stMarkdownContainer"] {
+        color: #18332e;
     }
     .block-container {
         max-width: 850px;
@@ -41,7 +51,7 @@ st.markdown(
         margin: .65rem 0;
     }
     .hero p {
-        color: #5e706b;
+        color: #405b54;
         font-size: 1.08rem;
         max-width: 38rem;
     }

@@ -1,72 +1,134 @@
 # pyright: reportMissingImports=false
-import streamlit as st
-import requests
-from gtts import gTTS
-from PIL import Image
 import io
+import os
 
-st.set_page_config(page_title="SnapIt AI", page_icon="🌍", layout="centered")
+import requests
+import streamlit as st
+from gtts import gTTS
+from gtts.tts import gTTSError
+from PIL import Image
 
-st.title("SnapIt: Visual Dictionary")
-st.write("Snap a photo with your camera or upload an image of an object to identify and learn more about it!")
 
-# Target Language Selection
-target_language = st.selectbox(
-    "Select Target Language:",
-    ["Chinese", "Korean", "Spanish", "French", "Japanese", "German", "Italian"]
+st.set_page_config(page_title="SnapIt | Visual Dictionary", page_icon="🌍", layout="centered")
+st.markdown(
+    """
+    <style>
+    .stApp {
+        background:
+            radial-gradient(ellipse at 8% 0%, rgba(133, 220, 199, .20), transparent 34rem),
+            #f6f8f6;
+    }
+    .block-container {
+        max-width: 850px;
+        padding-top: 3rem;
+        padding-bottom: 4rem;
+    }
+    .hero {
+        padding: 1.6rem 0 1.2rem;
+    }
+    .eyebrow {
+        color: #16836e;
+        font-size: .78rem;
+        font-weight: 700;
+        letter-spacing: .14em;
+        text-transform: uppercase;
+    }
+    .hero h1 {
+        color: #172c29;
+        font-size: clamp(2.5rem, 8vw, 4.3rem);
+        letter-spacing: -.055em;
+        line-height: 1;
+        margin: .65rem 0;
+    }
+    .hero p {
+        color: #5e706b;
+        font-size: 1.08rem;
+        max-width: 38rem;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"] {
+        background: rgba(255, 255, 255, .82);
+        border-color: #e2eae6;
+        border-radius: 20px;
+    }
+    [data-testid="stAudio"] {
+        min-width: 130px;
+    }
+    </style>
+    <div class="hero">
+      <div class="eyebrow">A little more curious</div>
+      <h1>SnapIt</h1>
+      <p>Point your camera at something new. Get its name, meaning, and story in two languages.</p>
+    </div>
+    """,
+    unsafe_allow_html=True,
 )
 
-st.markdown("---")
+with st.container(border=True):
+    st.markdown("#### 1. Choose a language")
+    target_language = st.selectbox(
+        "Translate the results into",
+        ["Chinese", "Korean", "Spanish", "French", "Japanese", "German", "Italian"],
+        label_visibility="collapsed",
+    )
 
-# Input Method Choice
-input_option = st.radio(
-    "Choose Input Method:", 
-    ["📷 Use Built-in Camera", "🖼️ Upload from Device Library"],
-    horizontal=True
-)
+    st.markdown("#### 2. Add a photo")
+    input_option = st.radio(
+        "Choose how to add your photo",
+        ["📷 Take a photo", "🖼️ Upload an image"],
+        horizontal=True,
+        label_visibility="collapsed",
+    )
 
-uploaded_file = None
+    uploaded_file = None
+    if input_option == "📷 Take a photo":
+        uploaded_file = st.camera_input("Take a picture of an object")
+    else:
+        uploaded_file = st.file_uploader(
+            "Choose an image from your device",
+            type=["jpg", "jpeg", "png"],
+            label_visibility="collapsed",
+        )
 
-if "Camera" in input_option:
-    uploaded_file = st.camera_input("Take a picture")
-else:
-    uploaded_file = st.file_uploader("Upload an image from your device:", type=["jpg", "jpeg", "png"])
     if uploaded_file is not None:
-        st.image(uploaded_file, caption="Selected Image Preview", width='stretch')
+        st.image(uploaded_file, caption="Your image", use_container_width=True)
 
-# Analyze Button & Backend Request
-if uploaded_file is not None:
-    if st.button("🚀 Analyze Object", type="primary", use_container_width=True):
-        with st.spinner("Analyzing image with Gemini (this may take a few seconds)..."):
+    if uploaded_file is not None and st.button(
+        "✨ Discover this object",
+        type="primary",
+        use_container_width=True,
+    ):
+        with st.spinner("Looking closely…"):
             try:
-                # --- MEMORY OPTIMIZATION: Resize image using PIL before sending to Render ---
-                img = Image.open(uploaded_file)
-                img.thumbnail((1024, 1024))  # Constrain max dimensions to save server RAM
-                
-                buffered = io.BytesIO()
-                # Convert RGBA/PNG to RGB if needed to save as JPEG safely
-                if img.mode in ("RGBA", "P"):
-                    img = img.convert("RGB")
-                img.save(buffered, format="JPEG", quality=85)
-                resized_image_bytes = buffered.getvalue()
-                # --------------------------------------------------------------------------
+                image = Image.open(uploaded_file)
+                image.thumbnail((1024, 1024))
+                image = image.convert("RGB")
 
-                url = "https://snapit-pcai.onrender.com/analyze"
+                image_buffer = io.BytesIO()
+                image.save(image_buffer, format="JPEG", quality=85)
                 files = {
                     "image": (
                         "upload.jpg",
-                        resized_image_bytes,
+                        image_buffer.getvalue(),
                         "image/jpeg",
                     )
                 }
-                data = {"language": target_language}
+                response = requests.post(
+                    os.environ.get(
+                        "SNAPIT_API_URL",
+                        "https://snapit-pcai.onrender.com/analyze",
+                    ),
+                    files=files,
+                    data={"language": target_language},
+                    timeout=120,
+                )
 
-                response = requests.post(url, files=files, data=data, timeout=120)
-
-                if response.status_code == 200:
-                    # Expecting structured JSON back from server.py
-                    result_json = response.json()
-                    st.session_state['last_result'] = result_json
+                if response.ok:
+                    result = response.json()
+                    if not isinstance(result, dict):
+                        st.error("The analysis service returned an unexpected response.")
+                    else:
+                        st.session_state["last_result"] = result
+                        st.session_state["last_language"] = target_language
                 else:
                     try:
                         error = response.json().get("error", "Unknown error")
@@ -74,72 +136,80 @@ if uploaded_file is not None:
                         error = response.text or "Unknown error"
                     if isinstance(error, dict):
                         error = error.get("message", error)
-                    st.error(f"Server error: {error}")
-
+                    st.error(f"Analysis failed: {error}")
             except requests.exceptions.Timeout:
                 st.error("The analysis request timed out. Please try again.")
-            except requests.exceptions.ConnectionError as e:
-                st.error(f"Could not connect to backend server: {e}")
+            except requests.exceptions.ConnectionError as exc:
+                st.error(f"Could not connect to the analysis service: {exc}")
+            except requests.exceptions.RequestException as exc:
+                st.error(f"Could not complete the analysis request: {exc}")
+            except (OSError, ValueError) as exc:
+                st.error(f"Could not read this image: {exc}")
 
-# If we have a stored result, display it and provide a reset button
-if 'last_result' in st.session_state:
-    st.success("Analysis Complete!")
-    st.markdown("### 📋 Results:")
-    
-    res = st.session_state['last_result']
-    
-    # Map target language to gTTS language codes
-    lang_code_map = {
-        "Chinese": "zh-CN", "Korean": "ko", "Spanish": "es", 
-        "French": "fr", "Japanese": "ja", "German": "de", "Italian": "it"
+if "last_result" in st.session_state:
+    result = st.session_state["last_result"]
+    result_language = st.session_state.get("last_language", target_language)
+    language_codes = {
+        "Chinese": "zh-CN",
+        "Korean": "ko",
+        "Spanish": "es",
+        "French": "fr",
+        "Japanese": "ja",
+        "German": "de",
+        "Italian": "it",
     }
-    selected_lang_code = lang_code_map.get(target_language, "es")
 
-    st.markdown("---")
+    st.markdown("")
+    st.markdown("### Your discovery")
+    st.caption(f"English · {result_language}")
 
-    # --- English Name & Audio Row ---
-    eng_col1, eng_col2 = st.columns([4, 1])
-    with eng_col1:
-        st.markdown(f"**🇺🇸 English Name:** {res.get('english_name', 'N/A')}")
-    with eng_col2:
-        try:
-            tts_eng = gTTS(text=res.get('english_name', ''), lang='en')
-            audio_path_eng = "output_eng.mp3"
-            tts_eng.save(audio_path_eng)
-            st.audio(audio_path_eng, format="audio/mp3")
-        except Exception:
-            pass
+    with st.container(border=True):
+        english_column, translated_column = st.columns([4, 1])
+        with english_column:
+            st.markdown("**🇺🇸 English name**")
+            st.subheader(result.get("english_name", "N/A"))
+        with translated_column:
+            try:
+                audio = io.BytesIO()
+                gTTS(text=result.get("english_name", ""), lang="en").write_to_fp(audio)
+                st.audio(audio.getvalue(), format="audio/mp3")
+            except (gTTSError, OSError, RuntimeError, ValueError) as exc:
+                st.caption(f"English audio unavailable: {exc}")
 
-    # --- Translated Name & Audio Row ---
-    trans_col1, trans_col2 = st.columns([4, 1])
-    with trans_col1:
-        st.markdown(f"**🌍 {target_language} Name:** {res.get('translated_name', 'N/A')}")
-    with trans_col2:
-        try:
-            tts_trans = gTTS(text=res.get('translated_name', ''), lang=selected_lang_code)
-            audio_path_trans = "output_trans.mp3"
-            tts_trans.save(audio_path_trans)
-            st.audio(audio_path_trans, format="audio/mp3")
-        except Exception:
-            pass
+        st.divider()
+        translated_name_column, translated_audio_column = st.columns([4, 1])
+        with translated_name_column:
+            st.markdown(f"**🌍 {result_language} name**")
+            st.subheader(result.get("translated_name", "N/A"))
+        with translated_audio_column:
+            try:
+                audio = io.BytesIO()
+                gTTS(
+                    text=result.get("translated_name", ""),
+                    lang=language_codes.get(result_language, "es"),
+                ).write_to_fp(audio)
+                st.audio(audio.getvalue(), format="audio/mp3")
+            except (gTTSError, OSError, RuntimeError, ValueError) as exc:
+                st.caption(f"Translated audio unavailable: {exc}")
 
-    st.markdown("---")
+    definition_column, background_column = st.columns(2)
+    with definition_column:
+        with st.container(border=True):
+            st.markdown("#### 📖 What it is")
+            st.markdown("**English**")
+            st.write(result.get("english_definition", "N/A"))
+            st.markdown(f"**{result_language}**")
+            st.write(result.get("translated_definition", "N/A"))
 
-    # --- Definitions Section ---
-    st.markdown("#### 📖 Definitions")
-    st.markdown(f"**English:** {res.get('english_definition', 'N/A')}")
-    st.markdown(f"**{target_language}:** {res.get('translated_definition', 'N/A')}")
+    with background_column:
+        with st.container(border=True):
+            st.markdown("#### 💡 Good to know")
+            st.markdown("**English**")
+            st.write(result.get("english_background", "N/A"))
+            st.markdown(f"**{result_language}**")
+            st.write(result.get("translated_background", "N/A"))
 
-    st.markdown("---")
-
-    # --- Background Info Section ---
-    st.markdown("#### 💡 Learn more about it!")
-    st.markdown(f"**English:** {res.get('english_background', 'N/A')}")
-    st.markdown(f"**{target_language}:** {res.get('translated_background', 'N/A')}")
-
-    st.markdown("---")
-    
-    # 🔄 Reset Button to take another photo
-    if st.button("🔄 Scan Another Item", type="secondary", use_keyword=True, use_container_width=True):
-        del st.session_state['last_result']
+    if st.button("↻ Scan another object", use_container_width=True):
+        del st.session_state["last_result"]
+        st.session_state.pop("last_language", None)
         st.rerun()

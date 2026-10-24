@@ -22,7 +22,7 @@ def analyze_object_bilingual(image_path, target_language):
     """
 
     response = client.models.generate_content(
-        model="gemini-3.8-flash",
+        model="gemini-2.5-flash",
         contents=[
             types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
             prompt

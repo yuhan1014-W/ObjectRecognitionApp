@@ -1,12 +1,11 @@
 from flask import Flask, request, jsonify
-import google.generativeai as genai
+from google import genai
+from google.genai import types
+import logging
 import os
 
 app = Flask(__name__)
-
-# Configure your Gemini API key directly or via environment variable
-# Replace "YOUR_API_KEY_HERE" with your actual Gemini API key
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+logger = logging.getLogger(__name__)
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
@@ -17,10 +16,12 @@ def analyze():
     target_language = request.form.get('language', 'Spanish')
     
     try:
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            logger.error("GEMINI_API_KEY is not configured")
+            return jsonify({"error": "The analysis service is not configured. Set GEMINI_API_KEY in the backend environment."}), 503
+
         image_bytes = image_file.read()
-        
-        # Use Gemini Flash for fast visual analysis
-        model = genai.GenerativeModel('gemini-3.8-flash')
         
         # Prompt strictly requesting all 6 required fields
         prompt = f"""
@@ -33,10 +34,17 @@ def analyze():
         Translated Background: [Background facts or information about the object translated into {target_language}]
         """
         
-        response = model.generate_content([
-            prompt,
-            {"mime_type": image_file.content_type or "image/jpeg", "data": image_bytes}
-        ])
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[
+                prompt,
+                types.Part.from_bytes(
+                    data=image_bytes,
+                    mime_type=image_file.content_type or "image/jpeg",
+                ),
+            ],
+        )
         
         raw_text = response.text.strip()
         
@@ -73,6 +81,7 @@ def analyze():
         })
 
     except Exception as e:
+        logger.exception("Gemini image analysis failed")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
